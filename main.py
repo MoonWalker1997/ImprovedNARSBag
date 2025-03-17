@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from utils import ChaoticNumberGenerator
 
 limit = 50
+elastic = 1
 
 
 class BBuffer:
@@ -16,12 +17,16 @@ class BBuffer:
         self.data = [[] for _ in range(num_BBuffer_levels)]
 
         self.cursor_l = 0
-        self.diffusor_l = list(itertools.chain(*[[i for _ in range(i + 1)] for i in range(num_BBuffer_levels)]))
+        self.diffusor_l = (
+            list(itertools.chain(*[[i for _ in range(int((i + 1) ** elastic))] for i in range(num_BBuffer_levels)])))
         random.shuffle(self.diffusor_l)
 
         self.cursor_s = 0
-        self.diffusor_s = list(
-            itertools.chain(*[[i for _ in range(num_BBuffer_levels - i + 1)] for i in range(num_BBuffer_levels)]))
+        self.diffusor_s = (
+            list(
+                itertools.chain(
+                    *[[i for _ in range(
+                        int((num_BBuffer_levels - i + 1) ** elastic))] for i in range(num_BBuffer_levels)])))
         random.shuffle(self.diffusor_s)
 
         self.hist_l = []
@@ -63,11 +68,13 @@ class Bag:
         self.data = [[] for _ in range(num_levels)]
 
         self.cursor_in_l = 0
-        self.diffusor_in_l = list(itertools.chain(*[[i for _ in range(i + 1)] for i in range(num_levels)]))
+        self.diffusor_in_l = (
+            list(itertools.chain(*[[i for _ in range(int((i + 1) ** elastic))] for i in range(num_levels)])))
         random.shuffle(self.diffusor_in_l)
 
         self.cursor_in_s = 0
-        self.diffusor_in_s = list(itertools.chain(*[[i for _ in range(num_levels - i)] for i in range(num_levels)]))
+        self.diffusor_in_s = (
+            list(itertools.chain(*[[i for _ in range(int((num_levels - i) ** elastic))] for i in range(num_levels)])))
         random.shuffle(self.diffusor_in_s)
 
         self.cursor_out = 0
@@ -123,7 +130,7 @@ if __name__ == "__main__":
     g = ChaoticNumberGenerator(0.05)
     numbers = g.generate_numbers(50000)
 
-    b = Bag(100, 500)
+    b = Bag(50, 100)
 
     while len(numbers) > 10:
         for _ in range(10):
@@ -134,11 +141,13 @@ if __name__ == "__main__":
     plt.grid()
     tmp = [np.average([each[0] for each in b.data[i]]) for i in range(len(b.data))]
     plt.plot(tmp)
-    plt.xlabel("levels")
+    plt.xlabel("buckets")
     plt.ylabel("average priority")
     plt.show()
 
-    plt.figure(figsize=(10, 4))
-    plt.grid()
-    plt.plot([len(b.data[i]) for i in range(100)])
-    plt.show()
+    # plt.figure(figsize=(10, 4))
+    # plt.grid()
+    # plt.plot([len(b.data[i]) for i in range(100)])
+    # plt.xlabel("buckets")
+    # plt.ylabel("num of tasks")
+    # plt.show()
