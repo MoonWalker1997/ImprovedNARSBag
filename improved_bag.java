@@ -3,194 +3,352 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
-public class BagSystem {
+class Pair<F, S> {
+    private F first;
+    private S second;
 
-    public static final int LIMIT = 5000;
+    public Pair(F first, S second) {
+        this.first = first;
+        this.second = second;
+    }
 
-    public static class Pair {
-        public double value;
-        public Object item;
+    public F getFirst() {
+        return first;
+    }
 
-        public Pair(double value, Object item) {
-            this.value = value;
-            this.item = item;
+    public S getSecond() {
+        return second;
+    }
+
+    public void setFirst(F first) {
+        this.first = first;
+    }
+
+    public void setSecond(S second) {
+        this.second = second;
+    }
+}
+
+class Type {
+    private String key;
+    private float priority;
+
+    public Type(String key, float priority) {
+        this.key = key;
+        this.priority = priority;
+    }
+
+    public String getKey() {
+        return key;
+    }
+
+    public float getPriority() {
+        return priority;
+    }
+
+    @Override
+    public String toString() {
+        return "Type{" + "key='" + key + '\'' + ", priority=" + priority + '}';
+    }
+}
+
+class BBuffer {
+    private int numBBufferLevels;
+    private List<List<Pair<Float, Type>>> data;
+    private List<Integer> cursorsL;
+    private List<List<Integer>> diffusersL;
+    private List<Integer> cursorsS;
+    private List<List<Integer>> diffusersS;
+
+    private static final int LIMIT = Bag.LIMIT;
+
+    private Random random;
+
+    public BBuffer(int numBBufferLevels, int numWorkingModes) {
+        this.numBBufferLevels = numBBufferLevels;
+        data = new ArrayList<>();
+        for (int i = 0; i < numBBufferLevels; i++) {
+            data.add(new ArrayList<>());
+        }
+
+        int levelsEachMode = numBBufferLevels / numWorkingModes;
+        random = new Random();
+
+        cursorsL = new ArrayList<>();
+        diffusersL = new ArrayList<>();
+        for (int i = 0; i < numWorkingModes; i++) {
+            cursorsL.add(0);
+            List<Integer> diffuser = new ArrayList<>();
+            for (int j = 0; j < levelsEachMode; j++) {
+                int k = i * levelsEachMode + j;
+                for (int count = 0; count < j + 1; count++) {
+                    diffuser.add(k);
+                }
+            }
+            Collections.shuffle(diffuser, random);
+            diffusersL.add(diffuser);
+        }
+
+        cursorsS = new ArrayList<>();
+        diffusersS = new ArrayList<>();
+        for (int i = 0; i < numWorkingModes; i++) {
+            cursorsS.add(0);
+            List<Integer> diffuser = new ArrayList<>();
+            for (int j = 0; j < levelsEachMode; j++) {
+                int k = i * levelsEachMode + j;
+                for (int count = 0; count < levelsEachMode - j; count++) {
+                    diffuser.add(k);
+                }
+            }
+            Collections.shuffle(diffuser, random);
+            diffusersS.add(diffuser);
         }
     }
 
-    public static class BBuffer {
-        private int numBBufferLevels;
-        private List<List<Pair>> data;
-        private List<Integer> cursors;
-        private List<List<Integer>> diffusers;
-        private Random random = new Random();
+    public void clear() {
+        data = new ArrayList<>();
+        for (int i = 0; i < numBBufferLevels; i++) {
+            data.add(new ArrayList<>());
+        }
+    }
 
-        public BBuffer(int numBBufferLevels, int numWorkingModes) {
-            this.numBBufferLevels = numBBufferLevels;
-            data = new ArrayList<>();
-            for (int i = 0; i < numBBufferLevels; i++) {
-                data.add(new ArrayList<>());
+    public void addItem(float value, Type type) {
+        int lv = (int)(value / (1.0 / numBBufferLevels));
+        if (lv < 0) {
+            lv = 0;
+        }
+        if (lv >= numBBufferLevels) {
+            lv = numBBufferLevels - 1;
+        }
+        data.get(lv).add(new Pair<>(value, type));
+        if (data.get(lv).size() > LIMIT * 100) {
+            data.get(lv).remove(0);
+        }
+    }
+
+    public Pair<Float, Type> popL(int modeIdx) {
+        int count = 1;
+        int cursor = (cursorsL.get(modeIdx) + 1) % diffusersL.get(modeIdx).size();
+        cursorsL.set(modeIdx, cursor);
+        while (data.get(diffusersL.get(modeIdx).get(cursor)).isEmpty()) {
+            count++;
+            if (count > diffusersL.get(modeIdx).size()) {
+                return new Pair<>(0f, null);
             }
+            cursor = (cursor + 1) % diffusersL.get(modeIdx).size();
+            cursorsL.set(modeIdx, cursor);
+        }
+        return data.get(diffusersL.get(modeIdx).get(cursor)).remove(0);
+    }
 
-            cursors = new ArrayList<>();
-            diffusers = new ArrayList<>();
+    public Pair<Float, Type> popS(int modeIdx) {
+        int count = 1;
+        int cursor = (cursorsS.get(modeIdx) + 1) % diffusersS.get(modeIdx).size();
+        cursorsS.set(modeIdx, cursor);
+        while (data.get(diffusersS.get(modeIdx).get(cursor)).isEmpty()) {
+            count++;
+            if (count > diffusersS.get(modeIdx).size()) {
+                return new Pair<>(0f, null);
+            }
+            cursor = (cursor + 1) % diffusersS.get(modeIdx).size();
+            cursorsS.set(modeIdx, cursor);
+        }
+        return data.get(diffusersS.get(modeIdx).get(cursor)).remove(0);
+    }
+}
 
-            int levelsEachMode = numBBufferLevels / numWorkingModes;
-            for (int i = 0; i < numWorkingModes; i++) {
-                cursors.add(0);
-                List<Integer> diffuser = new ArrayList<>();
-                int j = 0;
-                for (int k = i * levelsEachMode; k < (i + 1) * levelsEachMode; k++) {
-                    for (int rep = 0; rep < (j + 1); rep++) {
-                        diffuser.add(k);
-                    }
-                    j++;
+class Bag {
+    public static final int LIMIT = 100;
+
+    private int numLevels;
+    private int numWorkingModes;
+    private int popFrequency;
+    private int popCounter;
+
+    private List<List<Pair<Float, Type>>> data;
+
+    private List<Integer> cursorsInL;
+    private List<List<Integer>> diffusersInL;
+
+    private List<Integer> cursorsInS;
+    private List<List<Integer>> diffusersInS;
+
+    private int cursorOut;
+    private List<Integer> diffuserOut;
+
+    private BBuffer bBuffer;
+
+    private Random random;
+
+    public Bag(int numLevels, int numBBufferLevels, int numWorkingModes, int popFrequency) {
+        if (numLevels % numWorkingModes != 0 || numBBufferLevels % numWorkingModes != 0) {
+            throw new IllegalArgumentException("numLevels and numBBufferLevels must be divisible by numWorkingModes");
+        }
+        this.numLevels = numLevels;
+        this.numWorkingModes = numWorkingModes;
+        this.popFrequency = popFrequency;
+        this.popCounter = 0;
+        random = new Random();
+
+        data = new ArrayList<>();
+        for (int i = 0; i < numLevels; i++) {
+            data.add(new ArrayList<>());
+        }
+
+        cursorsInL = new ArrayList<>();
+        diffusersInL = new ArrayList<>();
+        int levelsEachMode = numLevels / numWorkingModes;
+        for (int i = 0; i < numWorkingModes; i++) {
+            cursorsInL.add(0);
+            List<Integer> diffuser = new ArrayList<>();
+            for (int j = 0; j < levelsEachMode; j++) {
+                int k = i * levelsEachMode + j;
+                for (int count = 0; count < j + 1; count++) {
+                    diffuser.add(k);
                 }
-                Collections.shuffle(diffuser, random);
-                diffusers.add(diffuser);
             }
+            Collections.shuffle(diffuser, random);
+            diffusersInL.add(diffuser);
         }
 
-        public void addItem(double value, Object item) {
-            int lv = (int) (value / (1.0 / numBBufferLevels));
-            if (lv >= numBBufferLevels) {
-                lv = numBBufferLevels - 1;
+        cursorsInS = new ArrayList<>();
+        diffusersInS = new ArrayList<>();
+        for (int i = 0; i < numWorkingModes; i++) {
+            cursorsInS.add(0);
+            List<Integer> diffuser = new ArrayList<>();
+            for (int j = 0; j < levelsEachMode; j++) {
+                int k = i * levelsEachMode + j;
+                for (int count = 0; count < levelsEachMode - j; count++) {
+                    diffuser.add(k);
+                }
             }
-            data.get(lv).add(new Pair(value, item));
-            if (data.get(lv).size() > LIMIT * 100) {
-                data.get(lv).remove(0);
-            }
+            Collections.shuffle(diffuser, random);
+            diffusersInS.add(diffuser);
         }
 
-        public Pair pop(int modeIdx) {
-            int count = 1;
-            List<Integer> diffuser = diffusers.get(modeIdx);
-            int cursor = (cursors.get(modeIdx) + 1) % diffuser.size();
-            cursors.set(modeIdx, cursor);
+        cursorOut = 0;
+        diffuserOut = new ArrayList<>();
+        for (int i = 0; i < numLevels; i++) {
+            for (int j = 0; j < i + 1; j++) {
+                diffuserOut.add(i);
+            }
+        }
+        Collections.shuffle(diffuserOut, random);
 
-            while (data.get(diffuser.get(cursor)).isEmpty()) {
+        bBuffer = new BBuffer(numBBufferLevels, numWorkingModes);
+    }
+
+    public void clear() {
+        data = new ArrayList<>();
+        for (int i = 0; i < numLevels; i++) {
+            data.add(new ArrayList<>());
+        }
+        bBuffer.clear();
+    }
+
+    public float getAveragePriority() {
+        float sum = 0;
+        int count = 0;
+        for (List<Pair<Float, Type>> bucket : data) {
+            for (Pair<Float, Type> task : bucket) {
+                sum += task.getFirst();
                 count++;
-                if (count > diffuser.size()) {
-                    return null;
-                }
-                cursor = (cursor + 1) % diffuser.size();
-                cursors.set(modeIdx, cursor);
             }
-            return data.get(diffuser.get(cursor)).remove(0);
         }
+        return count == 0 ? 0.01f : sum / count;
     }
 
-    public static class Bag {
-        private int numLevels;
-        private List<List<Pair>> data;
-        private int numWorkingModes;
-
-        private List<Integer> cursorsIn;
-        private List<List<Integer>> diffusersIn;
-
-        private int cursorOut;
-        private List<Integer> diffuserOut;
-
-        private BBuffer bBuffer;
-        private Random random = new Random();
-
-        public Bag(int numLevels, int numBBufferLevels, int numWorkingModes) {
-            if (numLevels % numWorkingModes != 0 || numBBufferLevels % numWorkingModes != 0) {
-                throw new IllegalArgumentException("numLevels and numBBufferLevels must be divided by numWorkingModes");
-            }
-            this.numLevels = numLevels;
-            data = new ArrayList<>();
-            for (int i = 0; i < numLevels; i++) {
-                data.add(new ArrayList<>());
-            }
-            this.numWorkingModes = numWorkingModes;
-
-            cursorsIn = new ArrayList<>();
-            diffusersIn = new ArrayList<>();
-            int levelsEachMode = numLevels / numWorkingModes;
-            for (int i = 0; i < numWorkingModes; i++) {
-                cursorsIn.add(0);
-                List<Integer> diffuser = new ArrayList<>();
-                int j = 0;
-                for (int k = i * levelsEachMode; k < (i + 1) * levelsEachMode; k++) {
-                    for (int rep = 0; rep < (j + 1); rep++) {
-                        diffuser.add(k);
-                    }
-                    j++;
-                }
-                Collections.shuffle(diffuser, random);
-                diffusersIn.add(diffuser);
-            }
-
-            cursorOut = 0;
-            diffuserOut = new ArrayList<>();
-            for (int i = 0; i < numLevels; i++) {
-                for (int rep = 0; rep < i + 1; rep++) {
-                    diffuserOut.add(i);
+    public boolean contains(Type type) {
+        for (List<Pair<Float, Type>> bucket : data) {
+            for (Pair<Float, Type> task : bucket) {
+                if (type.getKey().equals(task.getSecond().getKey())) {
+                    return true;
                 }
             }
-            Collections.shuffle(diffuserOut, random);
-
-            bBuffer = new BBuffer(numBBufferLevels, numWorkingModes);
         }
+        return false;
+    }
 
-        public void fromBBufferToBagModeX(int modeIdx) {
-            Pair tmp = bBuffer.pop(modeIdx);
-            if (tmp != null) {
-                List<Integer> diffuser = diffusersIn.get(modeIdx);
-                int cursor = (cursorsIn.get(modeIdx) + 1) % diffuser.size();
-                cursorsIn.set(modeIdx, cursor);
-                int index = diffuser.get(cursor);
-                data.get(index).add(tmp);
+    public Type get(Object key) {
+        for (List<Pair<Float, Type>> bucket : data) {
+            for (Pair<Float, Type> task : bucket) {
+                if (key.equals(task.getSecond().getKey())) {
+                    return task.getSecond();
+                }
+            }
+        }
+        return null;
+    }
+
+    public void putIn(Type type) {
+        bBuffer.addItem(type.getPriority(), type);
+        if (popCounter == popFrequency) {
+            fromBBufferToBag();
+            popCounter = 0;
+        }
+        popCounter++;
+    }
+
+    public void putBack(Type oldType, int forgetCycles, int m) {
+        TBD
+    }
+
+    public void fromBBufferToBagModeX(int modeIdx) {
+        if (random.nextDouble() < 0.5) {
+            Pair<Float, Type> pair = bBuffer.popL(modeIdx);
+            if (pair.getSecond() != null) {
+                int newCursor = (cursorsInL.get(modeIdx) + 1) % diffusersInL.get(modeIdx).size();
+                cursorsInL.set(modeIdx, newCursor);
+                int index = diffusersInL.get(modeIdx).get(newCursor);
+                data.get(index).add(pair.getSecond());
+                if (data.get(index).size() > LIMIT) {
+                    data.get(index).remove(0);
+                }
+            }
+        } else {
+            Pair<Float, Type> pair = bBuffer.popS(modeIdx);
+            if (pair.getSecond() != null) {
+                int newCursor = (cursorsInS.get(modeIdx) + 1) % diffusersInS.get(modeIdx).size();
+                cursorsInS.set(modeIdx, newCursor);
+                int index = diffusersInS.get(modeIdx).get(newCursor);
+                data.get(index).add(pair.getSecond());
                 if (data.get(index).size() > LIMIT) {
                     data.get(index).remove(0);
                 }
             }
         }
-
-        public void loadToBBuffer(double value, Object item) {
-            bBuffer.addItem(value, item);
-        }
-
-        public void fromBBufferToBag() {
-            int modeIdx = (int) Math.floor(random.nextDouble() * numWorkingModes);
-            fromBBufferToBagModeX(modeIdx);
-        }
-
-        public Pair popItem() {
-            int count = 1;
-            cursorOut = (cursorOut + 1) % diffuserOut.size();
-            while (data.get(diffuserOut.get(cursorOut)).isEmpty()) {
-                count++;
-                if (count > diffuserOut.size()) {
-                    return null;
-                }
-                cursorOut = (cursorOut + 1) % diffuserOut.size();
-            }
-            return data.get(diffuserOut.get(cursorOut)).remove(0);
-        }
     }
 
-    // testing (optional)
-    public static void main(String[] args) {
-        int numLevels = 10;
-        int numBBufferLevels = 10;
-        int numWorkingModes = 2;
-        Bag bag = new Bag(numLevels, numBBufferLevels, numWorkingModes);
+    public void fromBBufferToBag() {
+        int modeIdx = random.nextInt(numWorkingModes);
+        fromBBufferToBagModeX(modeIdx);
+    }
 
-        for (int i = 0; i < 20; i++) {
-            double value = Math.random();
-            bag.loadToBBuffer(value, "Item " + i);
+    public Type takeOut() {
+        int count = 1;
+        cursorOut = (cursorOut + 1) % diffuserOut.size();
+        while (data.get(diffuserOut.get(cursorOut)).isEmpty()) {
+            count++;
+            if (count > diffuserOut.size()) {
+                return null;
+            }
+            cursorOut = (cursorOut + 1) % diffuserOut.size();
         }
+        Pair<Float, Type> pair = data.get(diffuserOut.get(cursorOut)).remove(0);
+        return pair.getSecond();
+    }
 
-        for (int i = 0; i < 20; i++) {
-            bag.fromBBufferToBag();
+    public Type pickOut(Object key) {
+        for (int i = 0; i < data.size(); i++) {
+            List<Pair<Float, Type>> bucket = data.get(i);
+            for (int j = 0; j < bucket.size(); j++) {
+                Pair<Float, Type> task = bucket.get(j);
+                if (key.equals(task.getSecond().getKey())) {
+                    bucket.remove(j);
+                    return task.getSecond();
+                }
+            }
         }
-
-        Pair p = bag.popItem();
-        if (p != null) {
-            System.out.println("Popped: value=" + p.value + ", item=" + p.item);
-        } else {
-            System.out.println("No item popped.");
-        }
+        return null;
     }
 }
