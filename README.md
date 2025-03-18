@@ -1,3 +1,3 @@
 # Usage
 
-`$ python improved_bag_v2.py`
+`$ python improved_bag_v3.py`
